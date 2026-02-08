@@ -27,7 +27,10 @@ ALL_CHECKPOINTS=("$MEMORY_DIR"/checkpoint-"${BRANCH}"-*.md)
 
 # Check if glob matched anything (bash returns the literal pattern if no match)
 if [ ! -f "${ALL_CHECKPOINTS[0]:-}" ]; then
-  echo "[CHECKPOINT] No checkpoint found for branch '${BRANCH}'. One will be created on first commit or /save."
+  echo "[CHECKPOINT] No checkpoint found for branch '${BRANCH}'."
+  echo "Check MEMORY.md for project context, or ask the user what to work on."
+  echo "A checkpoint will be created on first commit or /save."
+  echo ""
   echo "This session's checkpoint file: memory/checkpoint-${BRANCH}-${SESSION_PID}.md"
   exit 0
 fi
