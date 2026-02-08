@@ -9,4 +9,6 @@ Required fields:
 - **Next Task Checklist** — remaining tasks as a checklist
 - **Reference Docs** — relevant file paths
 
-After saving, confirm to the user with the file path.
+After saving, clear the matching `.changes` file (`memory/checkpoint-{branch}-{pid}.changes`) by writing an empty string to it, since the change log has been incorporated into the full checkpoint.
+
+Confirm to the user with the file path.

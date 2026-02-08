@@ -27,12 +27,30 @@ BRANCH=$(git -C "$CLAUDE_PROJECT_DIR" branch --show-current 2>/dev/null | sed 's
 BRANCH=${BRANCH:-detached}
 SESSION_PID=$PPID
 CHECKPOINT_FILE="checkpoint-${BRANCH}-${SESSION_PID}.md"
+CHANGES_FILE="${MEMORY_DIR}/checkpoint-${BRANCH}-${SESSION_PID}.changes"
 
-jq -n --arg file "$CHECKPOINT_FILE" '{
-  "hookSpecificOutput": {
-    "hookEventName": "PostToolUse",
-    "additionalContext": ("[CHECKPOINT] Commit detected. Update memory/" + $file + " now. Create the file if it does not exist. Required fields: last updated (date + commit hash), completed work, current roadmap position, next task checklist, reference docs. This step MUST NOT be skipped.")
-  }
-}'
+# Read and clear changes log
+CHANGES_CONTEXT=""
+if [ -f "$CHANGES_FILE" ] && [ -s "$CHANGES_FILE" ]; then
+  CHANGES_CONTEXT=$(cat "$CHANGES_FILE")
+  > "$CHANGES_FILE"
+fi
+
+# Build prompt with or without changes context
+if [ -n "$CHANGES_CONTEXT" ]; then
+  jq -n --arg file "$CHECKPOINT_FILE" --arg changes "$CHANGES_CONTEXT" '{
+    "hookSpecificOutput": {
+      "hookEventName": "PostToolUse",
+      "additionalContext": ("[CHECKPOINT] Commit detected. Update memory/" + $file + " now. Create the file if it does not exist. Required fields: last updated (date + commit hash), completed work, current roadmap position, next task checklist, reference docs. This step MUST NOT be skipped.\n\nFiles changed since last checkpoint:\n" + $changes)
+    }
+  }'
+else
+  jq -n --arg file "$CHECKPOINT_FILE" '{
+    "hookSpecificOutput": {
+      "hookEventName": "PostToolUse",
+      "additionalContext": ("[CHECKPOINT] Commit detected. Update memory/" + $file + " now. Create the file if it does not exist. Required fields: last updated (date + commit hash), completed work, current roadmap position, next task checklist, reference docs. This step MUST NOT be skipped.")
+    }
+  }'
+fi
 
 exit 0

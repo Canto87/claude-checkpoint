@@ -19,6 +19,7 @@ SESSION_PID=$PPID
 
 # Cleanup stale checkpoints (older than 24 hours)
 find "$MEMORY_DIR" -name "checkpoint-${BRANCH}-*.md" -mmin +1440 -delete 2>/dev/null
+find "$MEMORY_DIR" -name "checkpoint-${BRANCH}-*.changes" -mmin +1440 -delete 2>/dev/null
 
 # Collect checkpoints for this branch, sorted by newest first, limit to 3
 MAX_CHECKPOINTS=3
@@ -71,6 +72,14 @@ for cp in "${CHECKPOINTS[@]}"; do
   echo "--- ${FILENAME} ---"
   cat "$cp"
   echo ""
+
+  # Check for matching .changes file
+  CHANGES_FILE="${cp%.md}.changes"
+  if [ -f "$CHANGES_FILE" ] && [ -s "$CHANGES_FILE" ]; then
+    echo "--- ${FILENAME%.md}.changes (auto-tracked) ---"
+    cat "$CHANGES_FILE"
+    echo ""
+  fi
 done
 
 if [ "$SKIPPED" -gt 0 ]; then
