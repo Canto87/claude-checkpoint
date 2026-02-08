@@ -227,6 +227,29 @@ The installer will exit with an error. Install it with `brew install jq` (macOS)
 **Q: How many checkpoints are loaded on restore?**
 Up to 3 most recent checkpoints for the current branch. Older ones are available via `/checkpoints`.
 
+## Tips
+
+### Quieter Checkpoint Updates
+
+By default, checkpoint saves triggered by hooks will show full Edit/Write diffs in the Claude Code UI and may prompt for permission approval.
+
+To make checkpoint updates run silently (collapsed into a single summary line), allow Edit and Write operations for the `memory/` path in your permission settings.
+
+You can configure this per-project in `.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Edit(memory/**)",
+      "Write(memory/**)"
+    ]
+  }
+}
+```
+
+This is entirely optional — some users prefer to review every checkpoint change.
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
