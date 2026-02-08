@@ -18,7 +18,7 @@ if [ "$EXIT_CODE" != "0" ]; then
 fi
 
 # Resolve memory directory from project path
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/\//-/g')
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[/_]/-/g')
 MEMORY_DIR="$HOME/.claude/projects/${ENCODED}/memory"
 mkdir -p "$MEMORY_DIR"
 

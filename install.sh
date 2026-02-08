@@ -153,7 +153,7 @@ fi
 echo -e "${GREEN}✓${NC} Updated $SETTINGS_FILE"
 
 # 5. Initialize memory directory with protocol
-ENCODED=$(echo "$TARGET_DIR" | sed 's/\//-/g')
+ENCODED=$(echo "$TARGET_DIR" | sed 's/[/_]/-/g')
 MEMORY_DIR="$HOME/.claude/projects/${ENCODED}/memory"
 mkdir -p "$MEMORY_DIR"
 

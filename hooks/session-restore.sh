@@ -8,7 +8,7 @@ INPUT=$(cat)
 [ -z "${CLAUDE_PROJECT_DIR:-}" ] && exit 0
 
 # Resolve memory directory from project path
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/\//-/g')
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[/_]/-/g')
 MEMORY_DIR="$HOME/.claude/projects/${ENCODED}/memory"
 
 # Detect current branch
