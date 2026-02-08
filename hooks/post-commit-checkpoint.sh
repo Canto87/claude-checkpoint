@@ -1,6 +1,9 @@
 #!/bin/bash
 # PostToolUse hook: Triggers checkpoint save on successful git commit
 INPUT=$(cat)
+
+[ -z "${CLAUDE_PROJECT_DIR:-}" ] && exit 0
+
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
 # Skip if not a git commit command (match "git commit" as a standalone command)

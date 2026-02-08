@@ -10,6 +10,7 @@ TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
 
 CLAUDE_DIR="$TARGET_DIR/.claude"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
+COMMANDS_DIR="$CLAUDE_DIR/commands"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
 # Colors
@@ -34,32 +35,62 @@ if [ ! -d "$TARGET_DIR/.git" ]; then
   exit 1
 fi
 
-# 2. Create .claude/hooks/ directory
+# 2. Create directories
 mkdir -p "$HOOKS_DIR"
+mkdir -p "$COMMANDS_DIR"
 echo -e "${GREEN}✓${NC} Created $HOOKS_DIR"
 
 # 3. Copy hook scripts
 cp "$SCRIPT_DIR/hooks/post-commit-checkpoint.sh" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/hooks/session-restore.sh" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/hooks/auto-save-checkpoint.sh" "$HOOKS_DIR/"
 chmod +x "$HOOKS_DIR/post-commit-checkpoint.sh"
 chmod +x "$HOOKS_DIR/session-restore.sh"
+chmod +x "$HOOKS_DIR/auto-save-checkpoint.sh"
 echo -e "${GREEN}✓${NC} Installed hook scripts"
 
-# 4. Merge hooks into settings.json
-# Identifier used to mark our hook entries for safe install/uninstall
-HOOK_ID="claude-checkpoint"
+# 3.5. Copy slash commands
+for cmd in "$SCRIPT_DIR"/commands/*.md; do
+  [ -f "$cmd" ] && cp "$cmd" "$COMMANDS_DIR/"
+done
+echo -e "${GREEN}✓${NC} Installed slash commands"
 
-POST_TOOL_ENTRY='{
-  "matcher": "Bash",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-commit-checkpoint.sh",
-      "timeout": 10
-    }
-  ],
-  "_id": "claude-checkpoint"
-}'
+# 4. Merge hooks into settings.json
+POST_TOOL_ENTRIES='[
+  {
+    "matcher": "Bash",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-commit-checkpoint.sh",
+        "timeout": 10
+      }
+    ],
+    "_id": "claude-checkpoint"
+  },
+  {
+    "matcher": "Edit",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/auto-save-checkpoint.sh",
+        "timeout": 10
+      }
+    ],
+    "_id": "claude-checkpoint"
+  },
+  {
+    "matcher": "Write",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/auto-save-checkpoint.sh",
+        "timeout": 10
+      }
+    ],
+    "_id": "claude-checkpoint"
+  }
+]'
 
 SESSION_ENTRIES='[
   {
@@ -103,11 +134,11 @@ if [ -f "$SETTINGS_FILE" ]; then
 
   # Remove any previous claude-checkpoint entries, then append new ones
   echo "$EXISTING" | jq \
-    --argjson post_entry "$POST_TOOL_ENTRY" \
+    --argjson post_entries "$POST_TOOL_ENTRIES" \
     --argjson session_entries "$SESSION_ENTRIES" \
     '
     # Remove old claude-checkpoint entries if any
-    .hooks.PostToolUse = ([(.hooks.PostToolUse // [])[] | select(._id != "claude-checkpoint")] + [$post_entry])
+    .hooks.PostToolUse = ([(.hooks.PostToolUse // [])[] | select(._id != "claude-checkpoint")] + $post_entries)
     | .hooks.SessionStart = ([(.hooks.SessionStart // [])[] | select(._id != "claude-checkpoint")] + $session_entries)
     ' > "$SETTINGS_FILE.tmp"
 
@@ -115,9 +146,9 @@ if [ -f "$SETTINGS_FILE" ]; then
 else
   # Create new settings.json
   jq -n \
-    --argjson post_entry "$POST_TOOL_ENTRY" \
+    --argjson post_entries "$POST_TOOL_ENTRIES" \
     --argjson session_entries "$SESSION_ENTRIES" \
-    '{hooks: {PostToolUse: [$post_entry], SessionStart: $session_entries}}' > "$SETTINGS_FILE"
+    '{hooks: {PostToolUse: $post_entries, SessionStart: $session_entries}}' > "$SETTINGS_FILE"
 fi
 echo -e "${GREEN}✓${NC} Updated $SETTINGS_FILE"
 
@@ -154,7 +185,9 @@ echo "Done! claude-checkpoint is installed."
 echo ""
 echo "How it works:"
 echo "  • On commit     → saves checkpoint for current branch + session"
+echo "  • On edit       → auto-saves checkpoint (10min cooldown)"
 echo "  • On startup    → restores checkpoint into context"
 echo "  • On /clear     → restores checkpoint into context"
 echo "  • On compact    → restores checkpoint + prompts to save unsaved state"
+echo "  • /save         → manually save checkpoint anytime"
 echo "  • Stale files   → auto-cleaned after 24 hours"

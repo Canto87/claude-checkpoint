@@ -24,13 +24,13 @@
 
 ## The Problem
 
-Claude Code sessions lose context in various ways:
+Claude Code is a powerful coding agent, but its context window is finite.
 
-- **New session** or **terminal close** — all context is lost
-- **`/clear`** — all context is lost
-- **Compact** — context is compressed, but details like file paths, exact progress, and task checklists can be lost in summarization
+- **Compact** — when the context grows large, it gets compressed into a summary. Concrete details like file paths, task checklists, and step-by-step progress are often lost in the process
+- **Context window saturation** — when the context is completely full, even `/resume` can't help. You're forced to start a fresh session with no working state at all
+- **`/clear`** — intentionally resetting context also wipes your current working state
 
-You end up re-explaining your progress every time, or losing important details after compression.
+On long-running projects, this means critical progress details slip away the longer you work.
 
 ## The Solution
 
@@ -40,7 +40,7 @@ You end up re-explaining your progress every time, or losing important details a
   You work normally
        │
        ▼
-  git commit ──────► Checkpoint saved automatically
+  git commit / file edit ──► Checkpoint saved automatically
        │
        ▼
   Session ends (crash, close, compact, /clear)
@@ -75,9 +75,18 @@ git clone https://github.com/Canto87/claude-checkpoint.git
 | Event | Action |
 |:------|:-------|
 | `git commit` | Saves checkpoint (completed work, next tasks, references) |
-| Session start | Restores all branch checkpoints into context |
-| `/clear` | Restores all branch checkpoints into context |
+| File edit/write | Auto-saves checkpoint (10-minute cooldown between saves) |
+| Session start | Restores most recent checkpoints into context |
+| `/clear` | Restores most recent checkpoints into context |
 | Compact | Restores checkpoints + prompts Claude to save any unsaved state |
+
+### Slash Commands
+
+| Command | Description |
+|:--------|:------------|
+| `/save` | Manually save a checkpoint anytime |
+| `/checkpoints` | List all checkpoint files for the current branch |
+| `/checkpoint-clear` | Clean up old checkpoint files |
 
 ### File Structure
 
@@ -102,7 +111,7 @@ Each session writes to its own checkpoint file using the naming pattern:
 checkpoint-{branch}-{session-pid}.md
 ```
 
-Parallel sessions on the same project never conflict. On restore, all checkpoints for the current branch are loaded — giving full visibility into concurrent work.
+Parallel sessions on the same project never conflict. On restore, the **3 most recent** checkpoints for the current branch are loaded to keep context injection lightweight. Older checkpoints can be viewed with `/checkpoints`.
 
 Stale checkpoints older than **24 hours** are automatically cleaned up.
 
@@ -139,16 +148,21 @@ Stale checkpoints older than **24 hours** are automatically cleaned up.
 │                     Claude Code CLI                      │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
-│  PostToolUse Hook (on Bash)                              │
+│  PostToolUse Hooks                                       │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │  Detects `git commit` → triggers checkpoint save   │  │
-│  │  post-commit-checkpoint.sh                         │  │
+│  │  Bash  → detects git commit → checkpoint save      │  │
+│  │  Edit  → auto-save with 10min cooldown             │  │
+│  │  Write → auto-save with 10min cooldown             │  │
 │  └────────────────────────────────────────────────────┘  │
 │                                                          │
-│  SessionStart Hook (startup / clear / compact)           │
+│  SessionStart Hooks                                      │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │  Reads checkpoint files → injects into context     │  │
-│  │  session-restore.sh                                │  │
+│  │  startup / clear / compact → checkpoint restore    │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  Slash Commands                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  /save  /checkpoints  /checkpoint-clear            │  │
 │  └────────────────────────────────────────────────────┘  │
 │                                                          │
 ├──────────────────────────────────────────────────────────┤
@@ -170,8 +184,9 @@ Stale checkpoints older than **24 hours** are automatically cleaned up.
 
 What it does:
 1. Copies hook scripts to `.claude/hooks/`
-2. Merges hook config into `.claude/settings.json` (existing hooks are preserved)
-3. Adds session protocol section to your project's `MEMORY.md`
+2. Copies slash commands to `.claude/commands/`
+3. Merges hook config into `.claude/settings.json` (existing hooks are preserved)
+4. Adds session protocol section to your project's `MEMORY.md`
 
 ### Uninstall
 
@@ -179,7 +194,7 @@ What it does:
 ./uninstall.sh /path/to/your/project
 ```
 
-Removes only `claude-checkpoint` hook entries. Other hooks and settings are untouched.
+Removes only `claude-checkpoint` hook entries, commands, and temp files. Other hooks and settings are untouched.
 
 > Checkpoint files in `~/.claude/projects/*/memory/` are **not** deleted automatically.
 > Remove them manually if no longer needed.
@@ -189,24 +204,28 @@ Removes only `claude-checkpoint` hook entries. Other hooks and settings are unto
 The hook scripts themselves are **plain shell scripts** — they consume **zero API tokens**.
 
 The only token cost comes from:
-- **Checkpoint content injected on session start** (~200-500 tokens per checkpoint)
-- **Claude writing the checkpoint on commit** (~300-600 tokens)
+- **Checkpoint restore on session start** — ~200-500 tokens per checkpoint (max 3 loaded)
+- **Checkpoint save on commit** — ~300-600 tokens
+- **Auto-save on file edit** — ~300-600 tokens (at most once per 10 minutes)
 
 Negligible compared to normal conversation usage.
 
 ## FAQ
 
 **Q: What if I forget to commit?**
-Checkpoints are only saved on `git commit`. If a session crashes before a commit, the last committed checkpoint is used on restore. Commit frequently for best results.
+Checkpoints are also auto-saved when you edit files (with a 10-minute cooldown). You can also run `/save` anytime for a manual save. So even without committing, your progress is periodically captured.
 
 **Q: Can I edit checkpoint files manually?**
-Yes, they're plain Markdown. But they'll be overwritten on the next commit in that session.
+Yes, they're plain Markdown. But they'll be overwritten on the next auto-save or commit in that session.
 
 **Q: Does it work with worktrees?**
 Yes. Each worktree has its own branch, so checkpoints are naturally isolated.
 
 **Q: What happens if `jq` is not installed?**
 The installer will exit with an error. Install it with `brew install jq` (macOS) or `apt install jq` (Linux).
+
+**Q: How many checkpoints are loaded on restore?**
+Up to 3 most recent checkpoints for the current branch. Older ones are available via `/checkpoints`.
 
 ## Contributing
 
